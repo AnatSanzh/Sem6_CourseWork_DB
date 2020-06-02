@@ -21,6 +21,7 @@
     "nodeplotlib": "^0.6.5",
     "papaparse": "^5.2.0",
     "redis": "^3.0.2",
+    "redis-clustr": "^1.7.0",
     "simple-statistics": "^7.1.0"
   }
 }

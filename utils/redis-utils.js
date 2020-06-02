@@ -7,6 +7,14 @@ module.exports = {
 			client.on('error', rej);
 		});
 	},
+	getClusterClient: async function(redisClustr, servers){
+		const client = new redisClustr(servers);
+		
+		return new Promise((res, rej) => {
+			client.on('connect', () => res(client));
+			client.on('error', rej);
+		});
+	},
 
 	incrNumAsString: async function(client, key, value){
 		return new Promise((res, rej) => {

@@ -1,11 +1,11 @@
 const prompt = require('./utils/prompt');
-const redis = require('redis');
+const RedisCluster = require('redis-clustr');
 const redisUtils = require('./utils/redis-utils');
 const terminalTitle = require('./utils/terminal-title');
 const model = require('./model');
 const fs = require('fs');
 const path = require('path');
-//const SS = require('simple-statistics');
+const npl = require('nodeplotlib');
 
 
 const menu = [
@@ -94,6 +94,12 @@ const menu = [
 	{
 		title: "Statistics",
 		response: async function(client){
+			const data =[{x: [1, 3, 4, 5], y: [3, 12, 1, 4], type: 'line'}];
+			npl.plot(data);
+
+			console.log(npl);
+
+
 			/*
 def statistics_total(self):
         try:
@@ -164,33 +170,42 @@ def statistics_total(self):
 
 
 (async function(){
-	const port="6379", host="127.0.0.1";
-	const client = await redisUtils.getClient(redis, host, port);
+	const host="127.0.0.1";
+	const client = await redisUtils.getClusterClient(RedisCluster, [
+		{ host, port: 7000 },
+		{ host, port: 7001 },
+		{ host, port: 7002 }
+	]);
 
-	if((await redisUtils.getKeyList(client, redisUtils.getMovieKey("*"))).length == 0){
-		await model.fillMovieData(client);
-	}
+	const myArgs = process.argv.slice(2);
 
-	while(true){
-		console.clear();
-
-		console.log("Options:");
-
-		menu.forEach( ({title},idx) => console.log((idx+1) + ") " + title) );
-
-		const selectedOptionIdx = new Number(await prompt("\n> ")) - 1;
-
-		if(selectedOptionIdx == undefined || selectedOptionIdx < 0 || selectedOptionIdx >= menu.length){
-			await prompt("Selected invalid option!");
-			continue;
+	if(myArgs.length == 1 && myArgs[0] === "--generation"){
+		if((await redisUtils.getKeyList(client, redisUtils.getMovieKey("*"))).length == 0){
+			await model.fillMovieData(client);
 		}
+	}else{
 
-		try{
-			await menu[selectedOptionIdx].response(client);
-		}catch(err){
-			console.log(err);
+		while(true){
+			console.clear();
+
+			console.log("Options:");
+
+			menu.forEach( ({title},idx) => console.log((idx+1) + ") " + title) );
+
+			const selectedOptionIdx = new Number(await prompt("\n> ")) - 1;
+
+			if(selectedOptionIdx == undefined || selectedOptionIdx < 0 || selectedOptionIdx >= menu.length){
+				await prompt("Selected invalid option!");
+				continue;
+			}
+
+			try{
+				await menu[selectedOptionIdx].response(client);
+			}catch(err){
+				console.log(err);
+			}
+
+			await prompt("Enter to continue...");
 		}
-
-		await prompt("Enter to continue...");
-	}
+}
 })();
