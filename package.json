@@ -1,0 +1,26 @@
+{
+  "name": "sem6_coursework_db",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnatSanzh/Sem6_CourseWork_DB.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AnatSanzh/Sem6_CourseWork_DB/issues"
+  },
+  "homepage": "https://github.com/AnatSanzh/Sem6_CourseWork_DB#readme",
+  "dependencies": {
+    "@hapi/joi": "^17.1.1",
+    "nodeplotlib": "^0.6.5",
+    "papaparse": "^5.2.0",
+    "redis": "^3.0.2",
+    "simple-statistics": "^7.1.0"
+  }
+}
