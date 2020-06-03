@@ -1,19 +1,35 @@
+async function getClient(redis, host, port){
+	const client = redis.createClient(port, host);
+	
+	return new Promise((res, rej) => {
+		client.on('connect', () => res(client));
+		client.on('error', rej);
+	});
+}
+
+async function getKeyList(client, pattern){
+	return new Promise((res, rej) => {
+		client.keys(pattern, function(err, arr) {
+		    if(err)
+		    	rej(err);
+		    else
+		    	res(arr);
+		});
+	});
+}
+
 module.exports = {
-	getClient: async function(redis, host, port){
-		const client = redis.createClient(port, host);
-		
+	getClient,
+	getClusterClient: async function(redisClustr, servers){
+		const client = new redisClustr(servers);
+
 		return new Promise((res, rej) => {
 			client.on('connect', () => res(client));
 			client.on('error', rej);
 		});
 	},
-	getClusterClient: async function(redisClustr, servers){
-		const client = new redisClustr(servers);
-		
-		return new Promise((res, rej) => {
-			client.on('connect', () => res(client));
-			client.on('error', rej);
-		});
+	getClusterKeyClients: async function(redis, servers){
+		return Promise.all(servers.map(({host, port}) => getClient(redis, host, port)));
 	},
 
 	incrNumAsString: async function(client, key, value){
@@ -207,16 +223,14 @@ module.exports = {
 	},
 
 	
-	getKeyList: async function(client, pattern){
-		return new Promise((res, rej) => {
-			client.keys(pattern, function(err, arr) {
-			    if(err)
-			    	rej(err);
-			    else
-			    	res(arr);
-			});
-		});
+	getKeyList,
+	getClusterKeyList: async function(clusterKeyClients, pattern){
+		return Array.prototype.concat.apply(
+			[],
+			await Promise.all(clusterKeyClients.map( client => getKeyList(client,pattern) ))
+		);
 	},
+
 	keyExists: async function(client, key){
 		return new Promise((res, rej) => {
 			client.exists(key, function(err, reply) {
@@ -224,6 +238,16 @@ module.exports = {
 			    	rej(err);
 			    else
 			    	res(reply === 1);
+			});
+		});
+	},
+	keyDelete: async function(client, key){
+		return new Promise((res, rej) => {
+			client.del(key, function(err) {
+			    if(err)
+			    	rej(err);
+			    else
+			    	res();
 			});
 		});
 	},

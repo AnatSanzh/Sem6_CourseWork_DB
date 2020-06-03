@@ -1,11 +1,13 @@
 const prompt = require('./utils/prompt');
 const RedisCluster = require('redis-clustr');
+const redis = require('redis');
 const redisUtils = require('./utils/redis-utils');
 const terminalTitle = require('./utils/terminal-title');
 const model = require('./model');
 const fs = require('fs');
 const path = require('path');
 const npl = require('nodeplotlib');
+const dataProcessing = require('./data-processing');
 
 
 const menu = [
@@ -66,9 +68,9 @@ const menu = [
 	},
 	{
 		title: "Data backup",
-		response: async function(client){
+		response: async function(client, keyClients){
 			const dumpFileName = "dump"+Math.round(new Date().getTime()/1000)+".json";
-			const dbKeys = await redisUtils.getKeyList(client, redisUtils.getMovieKey("*"));
+			const dbKeys = await redisUtils.getClusterKeyList(keyClients, redisUtils.getMovieKey("*"));
 
 			let backup = {};
 
@@ -81,6 +83,7 @@ const menu = [
 
 			await new Promise((res, rej) => fs.writeFile(
 				path.join(__dirname,'dumps',dumpFileName),
+				JSON.stringify(backup),
 				'utf8',
 				(err) => {
 					if(err)
@@ -93,77 +96,147 @@ const menu = [
 	},
 	{
 		title: "Statistics",
-		response: async function(client){
-			const data =[{x: [1, 3, 4, 5], y: [3, 12, 1, 4], type: 'line'}];
-			npl.plot(data);
+		response: async function(client, keyClients){
+			{
+				let labels = [];
+				let values = [];
 
-			console.log(npl);
+				(await dataProcessing.analysis1(client, keyClients))
+				.forEach( ([mediaName, {mean}]) => {
+					labels.push(mediaName);
+					values.push(mean);
+				});
 
+				npl.stack(
+					[{
+						x: labels,
+						y: values,
+						type: 'bar',
+						name: "Середній рейтинг користувачів",
+						text: values.map(String),
+						textposition: 'auto'
+					}],
+					{
+						showlegend: true,
+						legend: { x: 0.95, y: 0.95 },
+						title: "Медіасервіси за середнім рейтингом користувачів"
+						//xaxis: {},
+						//yaxis: {}	
+					}
+				);
+			}
+			{
+				let labels = [];
+				let values = [];
 
-			/*
-def statistics_total(self):
-        try:
-            country = self._get_str_from_list_value("Enter country", self._subsystems_controller.get_countries_list())
-            key = self._get_str_from_list_value("Enter mode", ['Confirmed', 'Deaths', 'Recovered'])
-            data = self._rserver.get_total_by_name(key, country)
-            if len(data) == 0:
-                raise Exception('no data')
-            self._view.show_graph(country, data, key, 'plot')
-        except Exception as e:
-            self._view.show_error(str(e))
+				(await dataProcessing.analysis2(client, keyClients))
+				.forEach( ([mediaName, {mean}]) => {
+					labels.push(mediaName);
+					values.push(mean);
+				});
 
-    def statistics(self):
-        try:
-            country = self._get_str_from_list_value("Enter country",
-                                                     self._subsystems_controller.get_countries_list())
-            key = self._get_str_from_list_value("Enter mode", ['Confirmed', 'Deaths', 'Recovered'])
-            data = self._rserver.get_daily_by_name(key, country)
-            if len(data) == 0:
-                raise Exception('no data')
-            self._view.show_graph(country, data, key, 'bar')
-        except Exception as e:
-            self._view.show_error(str(e))
+				npl.stack(
+					[{
+						x: labels,
+						y: values,
+						type: 'bar',
+						name: "Середній рейтинг критиків",
+						text: values.map(String),
+						textposition: 'auto'
+					}],
+					{
+						showlegend: true,
+						legend: { x: 0.95, y: 0.95 },
+						title: "Медіасервіси за середнім рейтингом критиків"
+						//xaxis: {},
+						//yaxis: {}	
+					}
+				);
+			}
+			{
+				let xValues = [];
+				let yValues = [];
+				let xValuesFunc = [Infinity,-Infinity];
 
-    def day_statistics(self):
-        country = self._get_str_from_list_value("Enter country",
-                                                 self._subsystems_controller.get_countries_list())
-        date_range = self._rserver.get_range_of_date_for_country(country)
-        given_date = self._get_date_value("Enter date", date_range)
-        data = self._rserver.get_all_day_by_country(country, str(given_date))
-        self._view.show_pie("Statistics for the day", data)
+				const movies = await model.getAllMovies(client, keyClients);
 
-    def regression(self):
-        countries = self._rserver.get_countries_with_data()
-        given_key = self._get_str_from_list_value("Enter mode", ['Confirmed', 'Deaths', 'Recovered'])
-        keys_for_delete = []
-        for key, statistics_data in countries.items():
-            if 'Latitude' not in statistics_data or 'Longitude' not in statistics_data:
-                keys_for_delete.append(key)
+				movies.forEach( movie => {
+					const year = Number(movie.year);
+					xValues.push(year);
+					yValues.push(Number(movie.userRating));
+					
+					if(xValuesFunc[0] > year)
+						xValuesFunc[0] = year;
+					if(xValuesFunc[1] < year)
+						xValuesFunc[1] = year;
+				});
 
-        for key in keys_for_delete:
-            del countries[key]
-        self._view.regression(countries, given_key)
+				const yFunc = await dataProcessing.analysis3(client, keyClients);
+				
 
-    def countries_statistics(self):
-        countries = self._rserver.get_countries_with_data()
-        given_key = self._get_str_from_list_value("Enter mode", ['Confirmed', 'Deaths', 'Recovered'])
-        mode = self._get_str_from_list_value("Enter mode", ['Mean', 'Median', 'Max'])
-        data = {}
-        for country in countries:
-            values = [int(x) for x in self._rserver.get_daily_by_name(given_key, country).values()]
-            if len(values) != 0:
-                if mode == 'Mean':
-                    data[country] = np.mean(values)
-                elif mode == 'Median':
-                    data[country] = np.median(values)
-                elif mode == 'Max':
-                    data[country] = np.max(values)
-                else:
-                    raise Exception('Invalid mode in countries statistics func')
-        self._view.additional_task("", mode, data)
+				npl.stack(
+					[{
+						x: xValues,
+						y: yValues,
+						mode: 'markers',
+						type: 'scatter',
+						name: "рейтинг фільмів"
+					},{
+						x: xValuesFunc,
+						y: [yFunc(xValuesFunc[0]),yFunc(xValuesFunc[1])],
+						type: 'line',
+						name: "регресія"
+					}],
+					{
+						showlegend: true,
+						legend: { x: 0.95, y: 0.95 },
+						title: "Залежність між роками та користувацьким рейтингом"
+						//xaxis: {},
+						//yaxis: {}	
+					}
+				);
+			}
+			{
+				npl.stack(
+					Object.entries(await dataProcessing.analysis4(client, keyClients))
+					.map(([key, ageCategoryValues], index) => ({
+						labels: Object.keys(ageCategoryValues).map(t => t+'+'),
+						values: Object.values(ageCategoryValues),
+						type: 'pie',
+						domain: {
+							row: Math.floor(index % 2),
+							column: Math.floor(index / 2)
+						},
+						name: key,
+						hoverinfo: 'percent+name'
+					})),
+					{
+						showlegend: true,
+						legend: { x: 0.95, y: 0.95 },
+						title: "Розподіл фільмів за віком для кожного медіасервісу",
+						grid: {rows: 2, columns: 2}
+					}
+				);
+			}
+			{
+				const data = await dataProcessing.analysis5(client, keyClients);
 
-			*/
+				npl.stack(
+					[{
+						labels: Object.keys(data).map(t => t+'+'),
+						values: Object.values(data).map(({mean}) => mean),
+						type: 'pie',
+						hoverinfo: 'percent'
+					}],
+					{
+						showlegend: true,
+						legend: { x: 0.95, y: 0.95 },
+						title: "Розподіл середнього рейтингу критиків по віковим категоріям"
+					}
+				);
+			}
 
+			npl.plot();
 		}
 	}
 ];
@@ -171,20 +244,27 @@ def statistics_total(self):
 
 (async function(){
 	const host="127.0.0.1";
-	const client = await redisUtils.getClusterClient(RedisCluster, [
+	const servers = [
 		{ host, port: 7000 },
 		{ host, port: 7001 },
 		{ host, port: 7002 }
-	]);
+	];
+	const client = await redisUtils.getClusterClient(RedisCluster, servers);
+	const keyClients = await redisUtils.getClusterKeyClients(redis, servers);
 
 	const myArgs = process.argv.slice(2);
 
 	if(myArgs.length == 1 && myArgs[0] === "--generation"){
-		if((await redisUtils.getKeyList(client, redisUtils.getMovieKey("*"))).length == 0){
-			await model.fillMovieData(client);
+		if((await redisUtils.getClusterKeyList(keyClients, redisUtils.getMovieKey("*"))).length === 0){
+			await model.fillMovieData(client, keyClients);
 		}
-	}else{
 
+		process.exit();
+	}else if(myArgs.length == 1 && myArgs[0] === "--erasure"){
+		await redisUtils.keyDelete(client, await redisUtils.getClusterKeyList(keyClients, redisUtils.getMovieKey("*")));
+
+		process.exit();
+	}else{
 		while(true){
 			console.clear();
 
@@ -200,12 +280,12 @@ def statistics_total(self):
 			}
 
 			try{
-				await menu[selectedOptionIdx].response(client);
+				await menu[selectedOptionIdx].response(client, keyClients);
 			}catch(err){
 				console.log(err);
 			}
 
 			await prompt("Enter to continue...");
 		}
-}
+	}
 })();
